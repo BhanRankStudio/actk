@@ -43,26 +43,29 @@ export async function GET(req: Request) {
 
     if (summary && user.role === "admin" && !userId) {
       const userSummaryMap = new Map<string, any>();
-      
-      records.forEach(r => {
+
+      records.forEach((r: (typeof records)[number]) => {
         if (!userSummaryMap.has(r.userId)) {
           userSummaryMap.set(r.userId, {
             user: r.user,
             totalHours: 0,
-            recordCount: 0
+            recordCount: 0,
           });
         }
         const s = userSummaryMap.get(r.userId);
-        s.totalHours += (r.totalHours ?? 0);
+        s.totalHours += r.totalHours ?? 0;
         s.recordCount += 1;
       });
 
-      return new Response(JSON.stringify({ data: Array.from(userSummaryMap.values()) }), {
-        status: 200,
-      });
+      return new Response(
+        JSON.stringify({ data: Array.from(userSummaryMap.values()) }),
+        {
+          status: 200,
+        },
+      );
     }
 
-    const totalHours = records.reduce((sum, r) => sum + (r.totalHours ?? 0), 0);
+    const totalHours = records.reduce((sum: number, r: typeof records[number]) => sum + (r.totalHours ?? 0), 0);
 
     return new Response(JSON.stringify({ data: records, totalHours }), {
       status: 200,
