@@ -5,21 +5,53 @@ import { Button } from "@/components/ui/button";
 import { FileDown, Calendar, User, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const months = [
+  { value: "all", label: "All Months" },
+  { value: "1", label: "January" },
+  { value: "2", label: "February" },
+  { value: "3", label: "March" },
+  { value: "4", label: "April" },
+  { value: "5", label: "May" },
+  { value: "6", label: "June" },
+  { value: "7", label: "July" },
+  { value: "8", label: "August" },
+  { value: "9", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+];
+
+const currentYear = new Date().getFullYear();
+const years = [
+  { value: "all", label: "All Years" },
+  ...Array.from({ length: 11 }, (_, i) => ({ 
+    value: String(currentYear - 5 + i), 
+    label: String(currentYear - 5 + i) 
+  }))
+];
 
 export default function AdminExportPage() {
   const [loading, setLoading] = useState(false);
+  const [year, setYear] = useState<string>("all");
+  const [month, setMonth] = useState<string>("all");
 
   async function doExport(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
       const form = new FormData(e.target as HTMLFormElement);
-      const year = form.get("year");
-      const month = form.get("month");
       const userId = form.get("userId");
       const q = new URLSearchParams();
-      if (year) q.set("year", String(year));
-      if (month) q.set("month", String(month));
+      if (year !== "all") q.set("year", year);
+      if (month !== "all") q.set("month", month);
       if (userId) q.set("userId", String(userId));
       const url = `/api/admin/export?${q.toString()}`;
       const res = await fetch(url);
@@ -64,26 +96,40 @@ export default function AdminExportPage() {
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     Year
                   </label>
-                  <Input
-                    name="year"
-                    type="number"
-                    placeholder={new Date().getFullYear().toString()}
+                  <Select
+                    value={year}
+                    onValueChange={setYear}
                     disabled={loading}
-                  />
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {years.map((y) => (
+                        <SelectItem key={y.value} value={y.value}>{y.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    Month (1-12)
+                    Month
                   </label>
-                  <Input
-                    name="month"
-                    type="number"
-                    min={1}
-                    max={12}
-                    placeholder={(new Date().getMonth() + 1).toString()}
+                  <Select
+                    value={month}
+                    onValueChange={setMonth}
                     disabled={loading}
-                  />
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select Month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {months.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-2">

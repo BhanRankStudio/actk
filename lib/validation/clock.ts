@@ -25,3 +25,14 @@ export const manualClockSchema = z.object({
   }),
   workDetail: z.string().max(1000).optional(),
 });
+
+export const updateClockSchema = z.object({
+  departmentId: z.string().uuid().optional(),
+  startWorkTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), {
+    message: "Invalid ISO datetime",
+  }).optional(),
+  endWorkTime: z.string().refine((s) => !Number.isNaN(Date.parse(s)), {
+    message: "Invalid ISO datetime",
+  }).nullable().optional(),
+  workDetail: z.string().max(1000).nullable().optional(),
+});

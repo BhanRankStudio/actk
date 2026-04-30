@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Clock, History, FileText, LayoutDashboard, FileDown } from "lucide-react";
+import { Clock, FileText, LayoutDashboard, FileDown } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -35,29 +35,21 @@ async function DashboardContent() {
         },
       ]
     : [
-        {
-          title: "Clock In / Out",
-          description: "Start or end your work session and track your time.",
-          href: "/dashboard/clock",
-          icon: Clock,
-          color: "text-blue-500",
-        },
-        {
-          title: "History",
-          description: "View your past clock records and work details.",
-          href: "/dashboard/history",
-          icon: History,
-          color: "text-green-500",
-        },
-        {
-          title: "Monthly Report",
-          description: "View your monthly attendance summaries and total work hours.",
-          href: "/admin/monthly-report",
-          icon: FileText,
-          color: "text-purple-500",
-        },
-      ];
-
+      {
+        title: "Clock In / Out",
+        description: "Start or end your work session and track your time.",
+        href: "/dashboard/clock",
+        icon: Clock,
+        color: "text-blue-500",
+      },
+      {
+        title: "Monthly Report",
+        description: "View your monthly attendance summaries and total work hours.",
+        href: "/admin/monthly-report",
+        icon: FileText,
+        color: "text-purple-500",
+      },
+    ];
   return (
     <main className="min-h-screen bg-muted/30 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-8">
