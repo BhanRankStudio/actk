@@ -60,8 +60,24 @@ const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
 
 export default function MonthlyReportPage() {
   const [user, setUser] = useState<any>(null);
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  
+  // Initialize with current business month cutoff
+  const now = dayjs().tz("Asia/Bangkok");
+  
+  // Logic for old Year/Month selection
+  const initialYear = now.date() >= 26 ? now.year() : (now.month() === 0 ? now.year() - 1 : now.year());
+  const initialMonth = now.date() >= 26 ? now.month() + 1 : now.month() || 12;
+
+  const [year, setYear] = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
+
+  // Logic for new Date Range selection (Admin only)
+  const defaultEnd = dayjs.tz(`${now.year()}-${String(now.month() + 1).padStart(2, '0')}-25`, "Asia/Bangkok");
+  const defaultStart = defaultEnd.subtract(1, "month").add(1, "day").startOf("day");
+
+  const [startDate, setStartDate] = useState(defaultStart.format("YYYY-MM-DD"));
+  const [endDate, setEndDate] = useState(defaultEnd.format("YYYY-MM-DD"));
+  
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -115,11 +131,16 @@ export default function MonthlyReportPage() {
     setView("summary");
     setSelectedUser(null);
     try {
-      const q = new URLSearchParams({
-        year: String(year),
-        month: String(month),
-        summary: "true"
-      });
+      const q = new URLSearchParams();
+      if (isAdmin) {
+        q.set("startDate", dayjs.tz(startDate, "Asia/Bangkok").startOf("day").toISOString());
+        q.set("endDate", dayjs.tz(endDate, "Asia/Bangkok").endOf("day").toISOString());
+      } else {
+        q.set("year", String(year));
+        q.set("month", String(month));
+      }
+      q.set("summary", "true");
+      
       const res = await fetch(`/api/admin/clock?${q.toString()}`);
       if (!res.ok) throw new Error("Failed to load summary");
       const json = await res.json();
@@ -140,11 +161,16 @@ export default function MonthlyReportPage() {
       setSelectedUser(targetUser);
     }
     try {
-      const q = new URLSearchParams({
-        year: String(year),
-        month: String(month),
-        userId: targetUser.id
-      });
+      const q = new URLSearchParams();
+      if (isAdmin && (view === "summary" || selectedUser)) {
+        q.set("startDate", dayjs.tz(startDate, "Asia/Bangkok").startOf("day").toISOString());
+        q.set("endDate", dayjs.tz(endDate, "Asia/Bangkok").endOf("day").toISOString());
+      } else {
+        q.set("year", String(year));
+        q.set("month", String(month));
+      }
+      q.set("userId", targetUser.id);
+      
       const res = await fetch(`/api/admin/clock?${q.toString()}`);
       if (!res.ok) throw new Error("Failed to load user report");
       const json = await res.json();
@@ -256,14 +282,23 @@ export default function MonthlyReportPage() {
   const isAdmin = user?.role === "admin";
 
   const renderCalendar = () => {
-    const startOfMonth = dayjs(`${year}-${month}-01`).startOf('month');
+    // For admins using range picker, use the start date of the range
+    // For regular users, use the selected year/month
+    const startObj = isAdmin && (view === "summary" || selectedUser) 
+      ? dayjs(startDate) 
+      : dayjs(`${year}-${month}-01`);
+      
+    const startOfMonth = startObj.startOf('month');
     const daysInMonth = startOfMonth.daysInMonth();
     const firstDayOfWeek = startOfMonth.day(); // 0 (Sun) to 6 (Sat)
     
     const recordsByDay = data.reduce((acc: Record<number, any[]>, record) => {
-      const d = dayjs(record.startWorkTime).tz("Asia/Bangkok").date();
-      if (!acc[d]) acc[d] = [];
-      acc[d].push(record);
+      const recordDate = dayjs(record.startWorkTime).tz("Asia/Bangkok");
+      if (recordDate.month() === startOfMonth.month() && recordDate.year() === startOfMonth.year()) {
+        const d = recordDate.date();
+        if (!acc[d]) acc[d] = [];
+        acc[d].push(record);
+      }
       return acc;
     }, {});
 
@@ -293,7 +328,7 @@ export default function MonthlyReportPage() {
               onClick={() => {
                 if (day && hasRecords) {
                   setSelectedDayRecords(dayRecords);
-                  setSelectedDateLabel(dayjs(`${year}-${month}-${day}`).format("MMMM D, YYYY"));
+                  setSelectedDateLabel(dayjs(`${startOfMonth.year()}-${startOfMonth.month() + 1}-${day}`).format("MMMM D, YYYY"));
                   setIsDayDialogOpen(true);
                 }
               }}
@@ -333,7 +368,7 @@ export default function MonthlyReportPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <FileText className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold tracking-tight">Monthly Report</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Attendance Report</h1>
           </div>
           {isAdmin && view === "detail" && (
             <Button variant="outline" onClick={loadSummary} className="w-fit">
@@ -346,59 +381,100 @@ export default function MonthlyReportPage() {
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle>Filter Period</CardTitle>
-            <CardDescription>Select a period to view attendance.</CardDescription>
+            <CardDescription>
+              {isAdmin ? "Select a date range to view attendance." : "Select a month to view attendance."}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  Year
-                </label>
-                <Select
-                  value={String(year)}
-                  onValueChange={(val) => setYear(Number(val))}
-                  disabled={loading}
+            {isAdmin ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    Start Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    disabled={loading}
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    End Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    disabled={loading}
+                    className="w-full"
+                  />
+                </div>
+                <Button 
+                  onClick={view === "summary" ? loadSummary : () => loadUserReport(selectedUser || user)} 
+                  disabled={loading} 
+                  className="w-full"
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {years.map((y) => (
-                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                  {view === "summary" ? "Load Users" : "Refresh Report"}
+                </Button>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  Month
-                </label>
-                <Select
-                  value={String(month)}
-                  onValueChange={(val) => setMonth(Number(val))}
-                  disabled={loading}
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    Year
+                  </label>
+                  <Select
+                    value={String(year)}
+                    onValueChange={(val) => setYear(Number(val))}
+                    disabled={loading}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {years.map((y) => (
+                        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    Month
+                  </label>
+                  <Select
+                    value={String(month)}
+                    onValueChange={(val) => setMonth(Number(val))}
+                    disabled={loading}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select Month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {months.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                  onClick={() => loadUserReport(user)} 
+                  disabled={loading} 
+                  className="w-full"
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select Month" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {months.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                  Refresh Report
+                </Button>
               </div>
-              <Button 
-                onClick={isAdmin && view === "summary" ? loadSummary : () => loadUserReport(selectedUser || user)} 
-                disabled={loading} 
-                className="w-full"
-              >
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                {isAdmin && view === "summary" ? "Load Users" : "Refresh Report"}
-              </Button>
-            </div>
+            )}
           </CardContent>
         </Card>
 

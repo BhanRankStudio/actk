@@ -18,6 +18,8 @@ export async function GET(req: Request) {
     const month = url.searchParams.get("month")
       ? Number(url.searchParams.get("month"))
       : null;
+    const startDate = url.searchParams.get("startDate");
+    const endDate = url.searchParams.get("endDate");
 
     // RBAC: If not admin, you can only fetch your own data
     if (user.role !== "admin") {
@@ -28,7 +30,12 @@ export async function GET(req: Request) {
 
     if (userId) where.userId = userId;
 
-    if (year && month) {
+    if (startDate && endDate) {
+      where.startWorkTime = {
+        gte: new Date(startDate),
+        lte: new Date(endDate),
+      };
+    } else if (year && month) {
       const { startUtc, endUtc } = getCutoffRange(year, month);
       where.startWorkTime = { gte: startUtc, lte: endUtc };
     }
