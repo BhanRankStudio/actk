@@ -13,7 +13,8 @@ import {
   Loader2, 
   Clock, 
   MapPin, 
-  ChevronLeft, 
+  ChevronLeft,
+  ChevronRight,
   ArrowRight,
   List,
   Info,
@@ -89,9 +90,25 @@ export default function MonthlyReportPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
   // Calendar specific states
+  const [displayMonth, setDisplayMonth] = useState(dayjs().tz("Asia/Bangkok").startOf("month"));
   const [selectedDayRecords, setSelectedDayRecords] = useState<any[]>([]);
   const [isDayDialogOpen, setIsDayDialogOpen] = useState(false);
   const [selectedDateLabel, setSelectedDateLabel] = useState("");
+
+  // Sync displayMonth with filters
+  useEffect(() => {
+    if (user && user.role !== "admin") {
+      const newMonth = dayjs(`${year}-${month}-01`, "YYYY-M-DD").tz("Asia/Bangkok").startOf("month");
+      if (newMonth.isValid()) setDisplayMonth(newMonth);
+    }
+  }, [year, month, user]);
+
+  useEffect(() => {
+    if (user && user.role === "admin" && startDate) {
+      const newMonth = dayjs(startDate).tz("Asia/Bangkok").startOf("month");
+      if (newMonth.isValid()) setDisplayMonth(newMonth);
+    }
+  }, [startDate, user]);
 
   // Edit/Delete states
   const [editingRecord, setEditingRecord] = useState<any>(null);
@@ -282,82 +299,145 @@ export default function MonthlyReportPage() {
   const isAdmin = user?.role === "admin";
 
   const renderCalendar = () => {
-    // For admins using range picker, use the start date of the range
-    // For regular users, use the selected year/month
-    const startObj = isAdmin && (view === "summary" || selectedUser) 
-      ? dayjs(startDate) 
-      : dayjs(`${year}-${month}-01`);
-      
-    const startOfMonth = startObj.startOf('month');
+    const startOfMonth = displayMonth.startOf('month');
     const daysInMonth = startOfMonth.daysInMonth();
     const firstDayOfWeek = startOfMonth.day(); // 0 (Sun) to 6 (Sat)
     
-    const recordsByDay = data.reduce((acc: Record<number, any[]>, record) => {
+    // Group records by YYYY-MM-DD
+    const recordsByDay = data.reduce((acc: Record<string, any[]>, record) => {
       const recordDate = dayjs(record.startWorkTime).tz("Asia/Bangkok");
-      if (recordDate.month() === startOfMonth.month() && recordDate.year() === startOfMonth.year()) {
-        const d = recordDate.date();
-        if (!acc[d]) acc[d] = [];
-        acc[d].push(record);
-      }
+      const dateKey = recordDate.format("YYYY-MM-DD");
+      if (!acc[dateKey]) acc[dateKey] = [];
+      acc[dateKey].push(record);
       return acc;
     }, {});
 
-    const days = [];
-    for (let i = 0; i < firstDayOfWeek; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) days.push(i);
+    const days: any[] = [];
+    
+    // Leading days from previous month
+    const prevMonth = startOfMonth.subtract(1, 'month');
+    const daysInPrevMonth = prevMonth.daysInMonth();
+    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+      const d = daysInPrevMonth - i;
+      days.push({
+        day: d,
+        month: prevMonth.month(),
+        year: prevMonth.year(),
+        currentMonth: false,
+        dateKey: prevMonth.date(d).format("YYYY-MM-DD")
+      });
+    }
+    
+    // Days of current month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push({
+        day: i,
+        month: startOfMonth.month(),
+        year: startOfMonth.year(),
+        currentMonth: true,
+        dateKey: startOfMonth.date(i).format("YYYY-MM-DD")
+      });
+    }
+
+    // Trailing days to complete the grid (usually 42 cells for 6 weeks)
+    const remainingCells = 42 - days.length;
+    const nextMonth = startOfMonth.add(1, 'month');
+    for (let i = 1; i <= remainingCells; i++) {
+      days.push({
+        day: i,
+        month: nextMonth.month(),
+        year: nextMonth.year(),
+        currentMonth: false,
+        dateKey: nextMonth.date(i).format("YYYY-MM-DD")
+      });
+    }
 
     return (
-      <div className="grid grid-cols-7 gap-px bg-muted border rounded-xl overflow-hidden shadow-sm w-full">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-          <div key={d} className="bg-muted/50 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider border-b">
-            <span className="hidden sm:inline">{d}</span>
-            <span className="sm:hidden">{d[0]}</span>
-          </div>
-        ))}
-        {days.map((day, i) => {
-          const dayRecords = day ? recordsByDay[day] : null;
-          const hasRecords = dayRecords && dayRecords.length > 0;
-          
-          return (
-            <div 
-              key={i} 
-              className={cn(
-                "bg-background min-h-[80px] sm:min-h-[120px] p-1 sm:p-2 transition-all duration-200 border-b border-r",
-                day ? "hover:bg-primary/5 cursor-pointer group" : "bg-muted/5"
-              )}
-              onClick={() => {
-                if (day && hasRecords) {
-                  setSelectedDayRecords(dayRecords);
-                  setSelectedDateLabel(dayjs(`${startOfMonth.year()}-${startOfMonth.month() + 1}-${day}`).format("MMMM D, YYYY"));
-                  setIsDayDialogOpen(true);
-                }
-              }}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-primary" />
+            {displayMonth.format("MMMM YYYY")}
+          </h3>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={() => setDisplayMonth(prev => prev.subtract(1, 'month'))}
             >
-              {day && (
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="h-8"
+              onClick={() => setDisplayMonth(dayjs().tz("Asia/Bangkok").startOf('month'))}
+            >
+              Today
+            </Button>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={() => setDisplayMonth(prev => prev.add(1, 'month'))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-7 gap-px bg-muted border rounded-xl overflow-hidden shadow-sm w-full">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+            <div key={d} className="bg-muted/50 py-2 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider border-b">
+              <span className="hidden sm:inline">{d}</span>
+              <span className="sm:hidden">{d[0]}</span>
+            </div>
+          ))}
+          {days.map((dayObj, i) => {
+            const dayRecords = recordsByDay[dayObj.dateKey] || [];
+            const hasRecords = dayRecords.length > 0;
+            
+            return (
+              <div 
+                key={i} 
+                className={cn(
+                  "bg-background min-h-[80px] sm:min-h-[120px] p-1 sm:p-2 transition-all duration-200 border-b border-r",
+                  dayObj.currentMonth ? "hover:bg-primary/5 cursor-pointer group" : "bg-muted/5 opacity-50 cursor-pointer hover:opacity-100"
+                )}
+                onClick={() => {
+                  if (hasRecords) {
+                    setSelectedDayRecords(dayRecords);
+                    setSelectedDateLabel(dayjs(dayObj.dateKey).format("MMMM D, YYYY"));
+                    setIsDayDialogOpen(true);
+                  }
+                }}
+              >
                 <div className="flex flex-col h-full gap-1 sm:gap-2">
                   <span className={cn(
                     "text-xs sm:text-sm font-semibold h-5 w-5 sm:h-7 sm:w-7 flex items-center justify-center rounded-full transition-colors",
-                    hasRecords ? "bg-primary/10 text-primary" : "text-muted-foreground group-hover:text-foreground"
+                    hasRecords ? "bg-primary/10 text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    !dayObj.currentMonth && "text-muted-foreground/50"
                   )}>
-                    {day}
+                    {dayObj.day}
                   </span>
                   <div className="flex-1 space-y-0.5 sm:space-y-1 overflow-hidden">
-                    {dayRecords?.slice(0, 3).map(r => (
+                    {dayRecords.slice(0, 3).map(r => (
                       <div key={r.id} className="text-[8px] sm:text-[10px] leading-tight px-1 py-0.5 sm:px-1.5 sm:py-1 rounded bg-muted border border-transparent hover:border-primary/20 transition-all truncate font-medium">
                         {r.totalHours?.toFixed(1)}h <span className="hidden sm:inline">| {r.department?.name}</span>
                       </div>
                     ))}
-                    {dayRecords && dayRecords.length > 3 && (
+                    {dayRecords.length > 3 && (
                       <div className="text-[7px] sm:text-[9px] text-muted-foreground pl-1 font-medium italic">
                         + {dayRecords.length - 3} <span className="hidden sm:inline">more</span>
                       </div>
                     )}
                   </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
