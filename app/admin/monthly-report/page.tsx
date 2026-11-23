@@ -62,12 +62,10 @@ const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
 export default function MonthlyReportPage() {
   const [user, setUser] = useState<any>(null);
   
-  // Initialize with current business month cutoff
+  // Select the current calendar month in Bangkok.
   const now = dayjs().tz("Asia/Bangkok");
-  
-  // Logic for old Year/Month selection
-  const initialYear = now.date() >= 26 ? now.year() : (now.month() === 0 ? now.year() - 1 : now.year());
-  const initialMonth = now.date() >= 26 ? now.month() + 1 : now.month() || 12;
+  const initialYear = now.year();
+  const initialMonth = now.month() + 1;
 
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
@@ -288,6 +286,8 @@ export default function MonthlyReportPage() {
     }
   };
 
+  const isAdmin = user?.role === "admin";
+
   if (pageLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -295,8 +295,6 @@ export default function MonthlyReportPage() {
       </div>
     );
   }
-
-  const isAdmin = user?.role === "admin";
 
   const renderCalendar = () => {
     const startOfMonth = displayMonth.startOf('month');
